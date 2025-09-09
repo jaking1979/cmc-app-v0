@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import TopNav from '@/components/TopNav'
+import GlobalInstructionsModal from '@/components/GlobalInstructionsModal'
+
 import InstructionsModal from '@/components/GlobalInstructionsModal'
 
 const lessons = {
