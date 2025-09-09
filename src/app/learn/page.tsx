@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import TopNav from '@/components/TopNav'
-import InstructionsModal from '@/components/InstructionsModal'
+import InstructionsModal from '@/components/GlobalInstructionsModal'
 
 const lessons = {
   'relapse-justifications': {
@@ -115,7 +115,7 @@ export default function LearnIndexPage() {
         </ul>
       </main>
       {showInstructions && (
-        <InstructionsModal
+        <GlobalInstructionsModal open={true}
           title="How to Use the Learn Page"
           onClose={() => setShowInstructions(false)}
         >
@@ -128,7 +128,7 @@ export default function LearnIndexPage() {
           <p className="mt-2 text-sm text-gray-600">
             Note: This is a prototype. Some features may not behave exactly as in the final app.
           </p>
-        </InstructionsModal>
+        </GlobalInstructionsModal>
       )}
     </>
   )
