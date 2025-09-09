@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { useState, useMemo } from 'react'
+import TopNav from '@/components/TopNav'
+import GlobalInstructionsModal from '@/components/GlobalInstructionsModal'
 
 const USE_OPENAI = true
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
@@ -226,6 +228,7 @@ export default function AdvicePage() {
   const [planText, setPlanText] = useState<string>('')
 
   const [phase, setPhase] = useState<Phase>('NEED_CONTEXT')
+  const [showInstr, setShowInstr] = useState(false)
 
   const onPickDemo = (id: string) => {
     setScenarioId(id)
@@ -335,12 +338,7 @@ export default function AdvicePage() {
 
   return (
     <>
-      <nav className="bg-gray-100 p-4 mb-6 shadow-sm rounded-lg flex gap-4 sticky top-0 z-50">
-        <Link href="/" className="text-blue-600 hover:underline font-semibold">Home</Link>
-        <Link href="/learn" className="text-blue-600 hover:underline font-semibold">Learn</Link>
-        <Link href="/advice" className="text-blue-600 hover:underline font-semibold">Get Advice</Link>
-        <Link href="/crisis" className="text-red-600 hover:underline font-semibold">Crisis Support</Link>
-      </nav>
+      <TopNav title="🧭 Get Advice" onShowInstructions={() => setShowInstr(true)} />
 
       <main className="min-h-screen p-6 max-w-3xl mx-auto bg-white">
         <h1 className="text-3xl font-bold mb-2">🧭 Get Advice</h1>
@@ -369,17 +367,21 @@ export default function AdvicePage() {
         </div>
 
         {/* Transcript */}
-        <div className="space-y-3 mb-4">
-          {messages.map((m, i) => (
-            <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
-              <div className={
-                'inline-block max-w-[85%] rounded-lg px-3 py-2 ' +
-                (m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900')
-              }>
-                {m.text}
+        <div className="mb-4">
+          <div className="max-h-[50vh] overflow-y-auto space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            {messages.map((m, i) => (
+              <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
+                <div
+                  className={
+                    'inline-block max-w-[85%] rounded-lg px-3 py-2 ' +
+                    (m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-900 border border-gray-200')
+                  }
+                >
+                  {m.text}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         <textarea
@@ -466,6 +468,30 @@ export default function AdvicePage() {
           </div>
         ) : null}
       </main>
+      {showInstr && (
+        <GlobalInstructionsModal
+          open={true}
+          title="How this page works"
+          onClose={() => setShowInstr(false)}
+        >
+          <div className="space-y-3 text-sm text-gray-700">
+            <p>
+              This is a demo of the advice experience. You can either paste your own situation or pick a demo scenario.
+              The coach will first decide if it needs more context, then summarize and ask permission before offering a short
+              menu of behavioral options (CBT/DBT/ACT/Self‑Compassion/Mindfulness or harm‑reduction when appropriate).
+            </p>
+            <ul className="list-disc pl-5">
+              <li>Warm, brief reflections and a single open question when information is missing.</li>
+              <li>Once there’s enough clarity, it summarizes and asks if you want options.</li>
+              <li>If you choose an option, you can plan the first small step.</li>
+            </ul>
+            <p className="text-gray-600">
+              Note: This is a coaching tool, not medical or emergency care. If there’s an emergency, call 911. For suicidal
+              thoughts, call 988.
+            </p>
+          </div>
+        </GlobalInstructionsModal>
+      )}
     </>
   )
 }
