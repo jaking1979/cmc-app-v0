@@ -3,7 +3,7 @@
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import TopNav from '@/components/TopNav'
-import GlobalInstructionsModal from '@/components/GlobalGlobalInstructionsModal'
+import GlobalInstructionsModal from '@/components/GlobalInstructionsModal'
 
 const lessons = {
   'relapse-justifications': {
