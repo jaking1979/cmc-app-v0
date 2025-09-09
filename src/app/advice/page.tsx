@@ -1,9 +1,11 @@
 'use client'
 
-import Link from 'next/link'
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import TopNav from '@/components/TopNav'
 import GlobalInstructionsModal from '@/components/GlobalInstructionsModal'
+
+type Msg = { role: 'user' | 'assistant'; text: string; kind?: 'FOLLOWUP' | 'ADVICE' }
+type Phase = 'NEED_CONTEXT' | 'CLARIFY_GOAL' | 'SUMMARY_PERMISSION' | 'AWAIT_PERMISSION' | 'SUGGEST_OPTIONS'
 
 const USE_OPENAI = true
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
@@ -14,9 +16,7 @@ If you are in danger or need immediate help, please call 911 (or call 988 if you
 
 If you're looking for someone to help you beyond behavior coaching, you should connect with a licensed therapist.`
 
-/** ──────────────────────────────────────────────────────────────────────────
- * Demo scenarios (unchanged content)
- * ────────────────────────────────────────────────────────────────────────── */
+// ── Demo scenarios (unchanged)
 const demoScenarios: Record<string, { title: string; text: string; reflection: string; validation: string; followUp: string; actions: string[] }> = {
   '1': {
     title: 'Evening Loneliness After Conflict',
@@ -132,49 +132,13 @@ const demoScenarios: Record<string, { title: string; text: string; reflection: s
   },
 }
 
-/** ──────────────────────────────────────────────────────────────────────────
- * Helpers + phase machine
- * ────────────────────────────────────────────────────────────────────────── */
+// ── Helpers
 function looksCrisis(text: string) {
-  const s = text.toLowerCase()
-  return ['suicide','suicidal','kill myself','end my life','self harm','self-harm'].some(k => s.includes(k))
+  const s = (text || '').toLowerCase()
+  return ['suicide','suicidal','kill myself','end my life','self harm','self-harm','hurt myself','overdose','od '].some(k => s.includes(k))
 }
 
-// simple local fallback if API fails
-function buildLocalAdvice(
-  input: string,
-  demo?: { reflection: string; validation: string; followUp: string }
-) {
-  const t = (input || '').toLowerCase();
-  const isShort = t.length < 60;
-  const mentionsUse = /(drink|use|get high|relapse|slip|urge|craving)/i.test(t);
-  const mentionsConflict = /(fight|argu(e|ment)|conflict|yell|shout|mad|angry)/i.test(t);
-
-  const reflection = demo?.reflection || (
-    mentionsUse
-      ? "You’re feeling a strong pull toward relief right now."
-      : "You’re dealing with something that’s weighing on you."
-  );
-
-  const validation = demo?.validation || (
-    mentionsConflict
-      ? "After conflict, wanting quick relief is a very human reaction."
-      : "Wanting fast relief when you’re stressed is understandable."
-  );
-
-  const follow = isShort
-    ? (mentionsUse
-        ? "What just happened that’s fueling this urge, and what’s your goal—avoid, cut down, or ride it out?"
-        : "Tell me a bit more about what’s going on and what you’d like help with right now.")
-    : "";
-
-  return `${reflection} ${validation}${follow ? ' ' + follow : ''}`;
-}
-
-// PHASES — keep steps separate (never combine)
-type Phase = 'NEED_CONTEXT' | 'CLARIFY_GOAL' | 'SUMMARY_PERMISSION' | 'AWAIT_PERMISSION' | 'SUGGEST_OPTIONS'
-
-const goalMentioned = /(abstain|avoid(ing)?|quit|stop|not drink|cut\\s*down|reduce|moderate|stay sober|skip(\\s+it)?)/i
+const goalMentioned = /(abstain|avoid(ing)?|quit|stop|not drink|cut\s*down|reduce|moderate|stay sober|skip(\s+it)?)/i
 const isAffirmative = (s: string) => /\b(yes|yep|yeah|ok(ay)?|sure|please|sounds good|do it|go ahead)\b/i.test(s)
 
 function inferPhase(
@@ -186,18 +150,15 @@ function inferPhase(
 
   if (!history.length) return 'NEED_CONTEXT'
 
-  // If assistant just asked permission, await explicit yes
   if (last?.role === 'assistant' && /would it be ok|would it be okay|is it ok if i|share (a|some) options|offer options|share a few/i.test(last.text)) {
     return isAffirmative(msg) ? 'SUGGEST_OPTIONS' : 'AWAIT_PERMISSION'
   }
 
-  // If assistant last turn was a follow-up/question, keep clarifying until we have goal + some context
   if (last?.role === 'assistant' && (last.kind === 'FOLLOWUP' || /\?\s*$/.test(last.text))) {
     if (msg.length < 120 || !goalMentioned.test(msg)) return 'CLARIFY_GOAL'
     return 'SUMMARY_PERMISSION'
   }
 
-  // First reply after user's opening
   if (last?.role === 'user') {
     if (msg.length < 120 || !goalMentioned.test(msg)) return 'NEED_CONTEXT'
     return 'SUMMARY_PERMISSION'
@@ -206,29 +167,65 @@ function inferPhase(
   return 'NEED_CONTEXT'
 }
 
-/** ──────────────────────────────────────────────────────────────────────────
- * Component
- * ────────────────────────────────────────────────────────────────────────── */
-export default function AdvicePage() {
-  type Msg = { role: 'user' | 'assistant'; text: string; kind?: 'FOLLOWUP' | 'ADVICE' }
+function buildLocalAdvice(
+  input: string,
+  demo?: { reflection: string; validation: string; followUp: string }
+) {
+  const t = (input || '').toLowerCase();
+  const isShort = t.length < 60;
+  const mentionsUse = /(drink|use|get high|relapse|slip|urge|craving)/i.test(t);
+  const mentionsConflict = /(fight|argu(e|ment)|conflict|yell|shout|mad|angry)/i.test(t);
 
+  const reflection = demo?.reflection || (
+    mentionsUse ? "You’re feeling a strong pull toward relief right now."
+                : "You’re dealing with something that’s weighing on you."
+  );
+
+  const validation = demo?.validation || (
+    mentionsConflict ? "After conflict, wanting quick relief is a very human reaction."
+                     : "Wanting fast relief when you’re stressed is understandable."
+  );
+
+  const follow = isShort
+    ? (mentionsUse
+        ? "What just happened that’s fueling this urge, and what’s your goal—avoid, cut down, or ride it out?"
+        : "Tell me a bit more about what’s going on and what you’d like help with right now.")
+    : "";
+
+  return `${reflection} ${validation}${follow ? ' ' + follow : ''}`;
+}
+
+// ── Component
+export default function AdvicePage() {
   const [mode, setMode] = useState<'advice'|'chat'>('advice')
   const [scenarioId, setScenarioId] = useState<string>('')
 
   const [input, setInput] = useState<string>('')
-
   const [status, setStatus] = useState<'idle'|'thinking'|'streaming'|'done'>('idle')
   const [responseText, setResponseText] = useState('')
-  const isBusy = status === 'thinking' || status === 'streaming'
+
   const [messages, setMessages] = useState<Msg[]>([])
   const [lastKind, setLastKind] = useState<'FOLLOWUP' | 'ADVICE' | null>(null)
+  const [phase, setPhase] = useState<Phase>('NEED_CONTEXT')
 
   const [selectedAction, setSelectedAction] = useState<string | null>(null)
   const [askPlan, setAskPlan] = useState<boolean>(false)
   const [planText, setPlanText] = useState<string>('')
 
-  const [phase, setPhase] = useState<Phase>('NEED_CONTEXT')
   const [showInstr, setShowInstr] = useState(false)
+
+  // Auto-open instructions once (same behavior as onboarding)
+  useEffect(() => {
+    const seen = typeof window !== 'undefined' && window.localStorage.getItem('advice_seen')
+    if (!seen) {
+      setShowInstr(true)
+      try { window.localStorage.setItem('advice_seen', '1') } catch {}
+    }
+  }, [])
+
+  const isBusy = status === 'thinking' || status === 'streaming'
+  const demo = useMemo(() => (scenarioId ? demoScenarios[scenarioId] : null), [scenarioId])
+  const showCrisis = looksCrisis(input)
 
   const onPickDemo = (id: string) => {
     setScenarioId(id)
@@ -241,29 +238,22 @@ export default function AdvicePage() {
     setPhase('NEED_CONTEXT')
   }
 
-  const demo = useMemo(() => (scenarioId ? demoScenarios[scenarioId] : null), [scenarioId])
-  const showCrisis = looksCrisis(input)
-
   function cleanActionLabel(a: string) {
     const parts = a.split(':')
     return parts.length > 1 ? parts.slice(1).join(':').trim() : a.trim()
   }
 
-  // detect whether to show buttons (only AFTER permission)
   const canShowButtons = mode === 'advice' && phase === 'SUGGEST_OPTIONS' && !showCrisis
 
   async function generateAdvice() {
     if (!input.trim()) return
 
-    // add user message
     setMessages(prev => [...prev, { role: 'user', text: input }])
     const localInput = input
     setInput('')
 
-    // nextHistory: what the history will be after this user turn
     const nextHistory = [...messages, { role: 'user' as const, text: localInput }]
 
-    // reset selection/planning
     setSelectedAction(null)
     setAskPlan(false)
     setPlanText('')
@@ -271,20 +261,17 @@ export default function AdvicePage() {
     setResponseText('')
     setLastKind(null)
     setStatus('thinking')
-    await sleep(350)
+    await sleep(250)
     setStatus('streaming')
 
-    // ── decide the next PHASE (use nextHistory)
     const nextPhase = inferPhase(nextHistory, localInput)
     setPhase(nextPhase)
-
 
     let detected: 'FOLLOWUP' | 'ADVICE' | null = null
     let assembled = ''
 
-    if (USE_OPENAI) {
-      try {
-        // historyPayload now uses nextHistory
+    try {
+      if (USE_OPENAI) {
         const historyPayload = nextHistory.map(m => ({ role: m.role, content: m.text }))
         const res = await fetch('/api/advice', {
           method: 'POST',
@@ -306,30 +293,21 @@ export default function AdvicePage() {
           setResponseText(prev => prev + chunk)
           assembled += chunk
         }
-      } catch (err) {
-        // local fallback
-        detected = nextPhase === 'SUGGEST_OPTIONS' ? 'ADVICE' : 'FOLLOWUP'
-        const paragraph = buildLocalAdvice(localInput, demo || undefined)
-        assembled = paragraph
-        for (let i = 0; i < paragraph.length; i += 3) {
-          setResponseText(prev => prev + paragraph.slice(i, i + 3))
-          await sleep(15)
-        }
+      } else {
+        throw new Error('offline')
       }
-    } else {
+    } catch {
       detected = nextPhase === 'SUGGEST_OPTIONS' ? 'ADVICE' : 'FOLLOWUP'
       const paragraph = buildLocalAdvice(localInput, demo || undefined)
       assembled = paragraph
       for (let i = 0; i < paragraph.length; i += 3) {
         setResponseText(prev => prev + paragraph.slice(i, i + 3))
-        await sleep(15)
+        await sleep(12)
       }
     }
 
     const finalText = (assembled || responseText).trim()
-    if (!detected) {
-      detected = nextPhase === 'SUGGEST_OPTIONS' ? 'ADVICE' : 'FOLLOWUP'
-    }
+    if (!detected) detected = nextPhase === 'SUGGEST_OPTIONS' ? 'ADVICE' : 'FOLLOWUP'
     setStatus('done')
     setLastKind(detected)
     setMessages(prev => [...prev, { role: 'assistant', text: finalText, kind: detected || undefined }])
@@ -340,134 +318,144 @@ export default function AdvicePage() {
     <>
       <TopNav title="🧭 Get Advice" onShowInstructions={() => setShowInstr(true)} />
 
-      <main className="min-h-screen p-6 max-w-3xl mx-auto bg-white">
-        <h1 className="text-3xl font-bold mb-2">🧭 Get Advice</h1>
-        <p className="text-sm text-gray-600 mb-6">
-          Paste your scenario or pick a demo. I’ll either ask for a bit more context (in a warm, short paragraph),
-          or I’ll give a concise response and then offer options—step by step.
-        </p>
+      <main className="min-h-screen bg-white px-4 sm:px-6 pb-24 pt-4 sm:pt-6">
+        <div className="max-w-3xl mx-auto">
+          <h1 className="text-2xl font-semibold mb-2 text-gray-900">🧭 Get Advice</h1>
+          <p className="text-sm text-gray-600 mb-4">
+            Paste your scenario or pick a demo. I’ll either ask for a bit more context, or—once clear—summarize,
+            ask permission, and offer a short menu of behavioral options.
+          </p>
 
-        <div className="flex gap-2 mb-4">
-          <select
-            value={scenarioId}
-            onChange={(e) => onPickDemo(e.target.value)}
+          <div className="flex gap-2 mb-4">
+            <select
+              value={scenarioId}
+              onChange={(e) => onPickDemo(e.target.value)}
+              disabled={isBusy}
+              className="ml-auto px-3 py-2 border rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Choose a demo scenario"
+            >
+              <option value="">Use a demo scenario…</option>
+              <option value="1">#1 Evening Loneliness After Conflict</option>
+              <option value="2">#2 Stress at Work with Overwhelm</option>
+              <option value="3">#3 Anxiety Before Social Event</option>
+              <option value="4">#4 Difficulty Sleeping Due to Worry</option>
+              <option value="5">#5 Feeling Unmotivated to Exercise</option>
+              <option value="6">#6 Struggling with Healthy Eating</option>
+              <option value="7">#7 Difficulty Managing Anger</option>
+              <option value="8">#8 Feeling Isolated and Disconnected</option>
+            </select>
+          </div>
+
+          {/* Transcript window (scrolling like onboarding) */}
+          <div className="mb-3">
+            <div className="max-h-[50vh] overflow-y-auto space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              {messages.map((m, i) => (
+                <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
+                  <div
+                    className={
+                      'inline-block max-w-[85%] rounded-lg px-3 py-2 ' +
+                      (m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-900 border border-gray-200')
+                    }
+                  >
+                    {m.text}
+                  </div>
+                </div>
+              ))}
+
+              {(status === 'thinking' || status === 'streaming') && (
+                <div className="text-left">
+                  <div className="inline-block max-w-[85%] rounded-lg px-3 py-2 bg-gray-100 text-gray-900">
+                    {status === 'thinking' ? 'Thinking…' : <>{responseText}{status === 'streaming' ? '▌' : ''}</>}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Describe what’s going on…"
             disabled={isBusy}
-            className="ml-auto px-3 py-2 border rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <option value="">Use a demo scenario…</option>
-            <option value="1">#1 Evening Loneliness After Conflict</option>
-            <option value="2">#2 Stress at Work with Overwhelm</option>
-            <option value="3">#3 Anxiety Before Social Event</option>
-            <option value="4">#4 Difficulty Sleeping Due to Worry</option>
-            <option value="5">#5 Feeling Unmotivated to Exercise</option>
-            <option value="6">#6 Struggling with Healthy Eating</option>
-            <option value="7">#7 Difficulty Managing Anger</option>
-            <option value="8">#8 Feeling Isolated and Disconnected</option>
-          </select>
-        </div>
+            className="w-full h-36 p-3 border rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                if (!isBusy) generateAdvice()
+              }
+            }}
+          />
 
-        {/* Transcript */}
-        <div className="mb-4">
-          <div className="max-h-[50vh] overflow-y-auto space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-            {messages.map((m, i) => (
-              <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
-                <div
-                  className={
-                    'inline-block max-w-[85%] rounded-lg px-3 py-2 ' +
-                    (m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-900 border border-gray-200')
-                  }
+          <div className="flex gap-2 mt-2 mb-4">
+            <button
+              onClick={() => { if (!isBusy) { setMode('advice'); generateAdvice() } }}
+              disabled={isBusy}
+              className={`px-3 py-2 rounded-md border ${mode==='advice' ? 'bg-blue-600 text-white' : 'bg-white text-blue-700 border-blue-600'} disabled:opacity-50 disabled:cursor-not-allowed`}
+            >Get Advice</button>
+            <button
+              onClick={() => { if (!isBusy) { setMode('chat'); generateAdvice() } }}
+              disabled={isBusy}
+              className={`px-3 py-2 rounded-md border ${mode==='chat' ? 'bg-gray-800 text-white' : 'bg-white text-gray-800 border-gray-800'} disabled:opacity-50 disabled:cursor-not-allowed`}
+            >Just Chat</button>
+          </div>
+
+          {looksCrisis(input) && (
+            <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg whitespace-pre-wrap">
+              {CRISIS_TEXT}
+            </div>
+          )}
+
+          {canShowButtons && demo?.actions?.length ? (
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {demo.actions.map((a, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => { setSelectedAction(a); setAskPlan(true) }}
+                  className="text-left px-3 py-2 rounded-md border bg-green-50 hover:bg-green-100"
                 >
-                  {m.text}
+                  {cleanActionLabel(a)}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {askPlan && selectedAction && (
+            <div className="mt-4 p-3 border rounded-lg bg-white">
+              <p className="mb-2 font-medium">Plan this action?</p>
+              <p className="text-sm text-gray-700 mb-3">
+                You chose: <span className="font-semibold">{cleanActionLabel(selectedAction)}</span>. Do you want help planning how to implement it?
+              </p>
+              <div className="flex gap-2 mb-3">
+                <button onClick={() => setAskPlan(false)} className="px-3 py-2 border rounded-md">No thanks</button>
+                <button onClick={() => setAskPlan(true)} className="px-3 py-2 border rounded-md bg-blue-600 text-white">Yes, help me plan</button>
+              </div>
+              <div className="space-y-2">
+                <input
+                  className="w-full border rounded-md px-3 py-2"
+                  placeholder="First small step"
+                  value={planText}
+                  onChange={(e) => setPlanText(e.target.value)}
+                />
+                <div className="text-right">
+                  <button
+                    onClick={() => {
+                      const text = `Great — let’s make it doable. First step: ${planText || '⟨define a first step⟩'}. When will you do it, and what might get in the way?`
+                      setMessages(prev => [...prev, { role: 'assistant', text }])
+                      setAskPlan(false)
+                      setSelectedAction(null)
+                      setPlanText('')
+                    }}
+                    className="px-3 py-2 rounded-md bg-blue-600 text-white"
+                  >
+                    Add to chat
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
-
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Describe what’s going on…"
-          disabled={isBusy}
-          className="w-full h-40 p-3 border rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-        />
-
-        <div className="flex gap-2 mt-2 mb-4">
-          <button
-            onClick={() => { setMode('advice'); generateAdvice() }}
-            disabled={isBusy}
-            className={`px-3 py-2 rounded-md border ${mode==='advice' ? 'bg-blue-600 text-white' : 'bg-white text-blue-700 border-blue-600'} disabled:opacity-50 disabled:cursor-not-allowed`}
-          >Get Advice</button>
-          <button
-            onClick={() => { setMode('chat'); generateAdvice() }}
-            disabled={isBusy}
-            className={`px-3 py-2 rounded-md border ${mode==='chat' ? 'bg-gray-800 text-white' : 'bg-white text-gray-800 border-gray-800'} disabled:opacity-50 disabled:cursor-not-allowed`}
-          >Just Chat</button>
-        </div>
-
-        {looksCrisis(input) ? (
-          <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg whitespace-pre-wrap">
-            {CRISIS_TEXT}
-          </div>
-        ) : null}
-
-        {(status === 'thinking' || status === 'streaming') && (
-          <div className="mb-4 text-left">
-            <div className="inline-block max-w-[85%] rounded-lg px-3 py-2 bg-gray-100 text-gray-900">
-              {status === 'thinking' ? 'Thinking…' : <>{responseText}{status === 'streaming' ? '▌' : ''}</>}
-            </div>
-          </div>
-        )}
-
-        {/* Show action buttons ONLY after permission (phase === SUGGEST_OPTIONS) */}
-        {canShowButtons && status === 'done' && demo?.actions?.length ? (
-          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {demo.actions.map((a, idx) => (
-              <button
-                key={idx}
-                onClick={() => { setSelectedAction(a); setAskPlan(true) }}
-                className="text-left px-3 py-2 rounded-md border bg-green-50 hover:bg-green-100"
-              >
-                {cleanActionLabel(a)}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {/* Plan helper after picking an action */}
-        {askPlan && selectedAction ? (
-          <div className="mt-4 p-3 border rounded-lg bg-white">
-            <p className="mb-2 font-medium">Plan this action?</p>
-            <p className="text-sm text-gray-700 mb-3">You chose: <span className="font-semibold">{cleanActionLabel(selectedAction)}</span>. Do you want help planning how to implement it?</p>
-            <div className="flex gap-2 mb-3">
-              <button onClick={() => setAskPlan(false)} className="px-3 py-2 border rounded-md">No thanks</button>
-              <button onClick={() => setAskPlan(true)} className="px-3 py-2 border rounded-md bg-blue-600 text-white">Yes, help me plan</button>
-            </div>
-            <div className="space-y-2">
-              <input
-                className="w-full border rounded-md px-3 py-2"
-                placeholder="First small step"
-                value={planText}
-                onChange={(e) => setPlanText(e.target.value)}
-              />
-              <div className="text-right">
-                <button
-                  onClick={() => {
-                    const text = `Great — let’s make it doable. First step: ${planText || '⟨define a first step⟩'}. When will you do it, and what might get in the way?`
-                    setMessages(prev => [...prev, { role: 'assistant', text }])
-                    setAskPlan(false)
-                    setSelectedAction(null)
-                    setPlanText('')
-                  }}
-                  className="px-3 py-2 rounded-md bg-blue-600 text-white"
-                >
-                  Add to chat
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </main>
+
       {showInstr && (
         <GlobalInstructionsModal
           open={true}
@@ -476,18 +464,18 @@ export default function AdvicePage() {
         >
           <div className="space-y-3 text-sm text-gray-700">
             <p>
-              This is a demo of the advice experience. You can either paste your own situation or pick a demo scenario.
-              The coach will first decide if it needs more context, then summarize and ask permission before offering a short
-              menu of behavioral options (CBT/DBT/ACT/Self‑Compassion/Mindfulness or harm‑reduction when appropriate).
+              This is a demo of the advice experience. You can paste your own situation or pick a demo scenario.
+              The coach will first decide if it needs more context (short, warm reflection + one question).
+              Once clear, it summarizes, asks permission, then offers a short menu of behavioral options
+              (CBT/DBT/ACT/Self-Compassion/Mindfulness; harm-reduction only when appropriate and with a safety note).
             </p>
             <ul className="list-disc pl-5">
-              <li>Warm, brief reflections and a single open question when information is missing.</li>
-              <li>Once there’s enough clarity, it summarizes and asks if you want options.</li>
-              <li>If you choose an option, you can plan the first small step.</li>
+              <li>Never more than one question at a time.</li>
+              <li>Keeps validation separate from permission-asking.</li>
+              <li>After you choose an option, you can plan the first small step.</li>
             </ul>
             <p className="text-gray-600">
-              Note: This is a coaching tool, not medical or emergency care. If there’s an emergency, call 911. For suicidal
-              thoughts, call 988.
+              This is coaching, not medical care. If there’s an emergency, call 911. For suicidal thoughts, call 988.
             </p>
           </div>
         </GlobalInstructionsModal>
