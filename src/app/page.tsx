@@ -24,7 +24,7 @@ export default function Home() {
   return (
     <>
       {/* Sticky global nav (hamburger menu lives inside TopNav) */}
-      <TopNav />
+      <TopNav title="🏠 Home" />
 
       <main className="min-h-screen bg-gray-50 px-4">
         <div className="max-w-3xl mx-auto py-8 flex flex-col items-center">
