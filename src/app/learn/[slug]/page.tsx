@@ -3,7 +3,7 @@
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import TopNav from '@/components/TopNav'
-import InstructionsModal from '@/components/InstructionsModal'
+import GlobalInstructionsModal from '@/components/GlobalGlobalInstructionsModal'
 
 const lessons = {
   'relapse-justifications': {
@@ -246,7 +246,7 @@ export default function LessonPage() {
         </div>
       </main>
 
-      <InstructionsModal
+      <GlobalInstructionsModal
         open={showInstr}
         onClose={() => setShowInstr(false)}
         title="How this page works"
@@ -261,7 +261,7 @@ export default function LessonPage() {
             <li>You can reopen these instructions anytime from the ☰ menu.</li>
           </ul>
         </div>
-      </InstructionsModal>
+      </GlobalInstructionsModal>
     </>
   )
 }
