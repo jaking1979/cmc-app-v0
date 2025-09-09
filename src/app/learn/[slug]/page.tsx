@@ -215,7 +215,7 @@ export default function LessonPage() {
 
   return (
     <>
-      <TopNav title="📚 Learn Something" onOpenInstructions={() => setShowInstr(true)} />
+      <TopNav title="📚 Learn Something" onShowInstructions={() => setShowInstr(true)} />
 
       <main className="min-h-screen bg-white px-4 sm:px-6 pb-24 pt-4 sm:pt-6 max-w-3xl mx-auto">
         <h1 className="text-2xl font-semibold mb-4 text-gray-800">{lesson.title}</h1>
